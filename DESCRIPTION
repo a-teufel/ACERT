@@ -1,0 +1,59 @@
+Package: ACERT
+Type: Package
+Title: Agent-Based Model of Complex Life Cycle Evolution - R Tools
+Version: 0.1.0
+Date: 2025-01-01
+Authors@R: c(
+    person("Jesus A.", "Lopez",  role = "aut"),
+    person("Robert", "Page",  role = "aut"),
+    person("Ashley I.", "Teufel", 
+           email = "ateufel@tamusa.edu", 
+           role  = c("aut", "cre")))
+Description: An R package for analyzing outputs from agent-based models
+    of complex life cycle evolution. Includes functions for data wrangling, turtle
+    property analysis, population genetics calculations, patch visualization, and
+    assessment of replicate run outcomes. Optimized for handling large datasets.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Config/testthat/edition: 3
+Imports:
+    dplyr (>= 1.0.0),
+    ggplot2 (>= 3.3.0),
+    tidyr (>= 1.1.0),
+    stringr (>= 1.4.0),
+    data.table (>= 1.13.0),
+    adegenet (>= 2.1.0),
+    pegas (>= 0.14),
+    hierfstat (>= 0.5.0),
+    cluster (>= 2.1.0),
+    ggdendro (>= 0.1.0),
+    poppr (>= 2.9.0),
+    R.utils (>= 2.11.0),
+    parallel,
+    rlang (>= 0.4.0),
+    LEA,
+    dartR,
+    methods,
+    mmod,
+    FNN,
+    purrr,
+    tibble,
+    broom,
+    stats
+Suggests:
+    testthat (>= 3.0.0),
+    mockery,
+    covr,
+    arrow (>= 5.0.0),
+    gganimate,
+    viridis,
+    PopGenReport (>= 3.0.0),
+    cowplot (>= 1.1.0),
+    ggExtra (>= 0.9),
+    gridExtra (>= 2.3),
+    reshape2 (>= 1.4.4),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr

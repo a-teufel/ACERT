@@ -1,0 +1,574 @@
+---
+title: "Getting Started with ACERT"
+author: "Ashley Teufel"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with ACERT}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+## Introduction
+
+ACERT (Agent-based models of Complex life cycle Evolution R Tools) is an R package for analyzing spatially-explicit, population genetic agent-based model (ABM) simulations. This vignette demonstrates the core workflow using example data from a NetLogo simulation.
+
+```{r load_package}
+library(ACERT)
+library(ggplot2)
+library(dplyr)
+```
+
+## Example Data
+
+ACERT includes example data from 2 replicate simulation runs. Load it with:
+
+```{r load_data}
+
+
+# Create a temp output directory for the vignette
+out_dir <- file.path(tempdir(), "acert_vignette_data")
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Make 3 replicate triplets with aligned ticks from 1000..5000 every 1000
+idx <- generate_example_abm_replicates(
+  dir = out_dir,
+  prefix = "acert_demo",
+  n_reps = 3,
+  max_ticks = 5000,
+  record_every = 1000,
+  include_zero = FALSE,      # set TRUE if you also want tick 0
+  n_turtles = 600,
+  mutations_per_tick = 120,  # per recorded tick, per replicate
+  patches_per_tick = 1200,
+  seed = 42
+)
+
+example_turtles <- read_turtles(
+  path = out_dir,
+  pattern = "turtles.txt",
+  sample_method = "systematic",
+  progress = FALSE
+)
+
+example_environment <- read_environments(
+  path = out_dir,
+  pattern = "environment.txt"
+)
+
+example_mutations <- read_mutations(
+  path = out_dir,
+  pattern = "mutations.txt"
+)
+
+
+```
+
+## Data Preprocessing
+
+### Cleaning Breed-Specific Data
+
+Some variables are only meaningful for certain life stages (e.g., eggs don't have meaningful ages). Use `apply_breed_na_rules()` to clean this:
+
+```{r breed_na}
+# Apply breed-specific NA rules
+tdat_clean <- apply_breed_na_rules(example_turtles)
+
+# Compare before and after for eggs
+example_turtles %>% 
+  filter(breed == "eggs") %>% 
+  select(who, breed, t.age) %>% 
+  head(3)
+
+tdat_clean %>% 
+  filter(breed == "eggs") %>% 
+  select(who, breed, t.age) %>% 
+  head(3)
+```
+
+## Visualization
+
+### Landscape Visualization
+
+Visualize environmental variables across space and time:
+
+```{r viz_landscape}
+# Visualize pond locations at first time point
+visualize_patches(
+  example_environment[example_environment$ticks == min(example_environment$ticks), ],
+  property = "index",
+  facet_by = "run"
+)
+
+# Visualize patch energy
+visualize_patches(
+  example_environment[example_environment$ticks == min(example_environment$ticks), ],
+  property = "patch_energy",
+  facet_by = "run"
+)
+```
+
+### Population Dynamics
+
+Visualize population sizes by life stage:
+
+```{r viz_population}
+# Plot larvae population over time
+plot_breed_population(example_turtles, breed_type = "larvae")
+
+# Plot adult population over time
+plot_breed_population(example_turtles, breed_type = "adults")
+```
+
+### Phenotype Analysis
+
+Analyze turtle properties across groupings:
+
+```{r phenotype_analysis}
+# Analyze size at metamorphosis by sex
+example_turtles %>%
+  filter(breed %in% c("juveniles", "adults")) %>%
+  analyze_turtle_property(
+    property = "t.size.cm.metamorphosis",
+    grouping = "t.sex"
+  ) %>%
+  plot_turtle_property(
+    property = "Size at Metamorphosis (cm)",
+    grouping = "t.sex"
+  )
+
+# Analyze stress by breed
+example_turtles %>%
+  filter(breed %in% c("larvae", "juveniles", "adults")) %>%
+  analyze_turtle_property(
+    property = "t.stress",
+    grouping = "breed"
+  ) %>%
+  plot_turtle_property(
+    property = "Stress",
+    grouping = "breed"
+  )
+```
+
+## Replicate Assessment
+
+Assess similarity between replicate runs using clustering:
+
+```{r replicate_assessment}
+# Assess replicate similarity
+similarity <- assess_replicate_similarity(
+  tdat_clean,
+  properties = c(
+    "t.age.metamorphosis",
+    "t.size.cm.metamorphosis",
+    "t.stress"
+  )
+)
+
+# Plot silhouette scores (optimal k)
+plot_replicate_assessment(similarity, plot_type = "silhouette")
+
+# Plot PCA
+plot_replicate_assessment(similarity, plot_type = "pca")
+
+# Plot dendrogram
+plot_replicate_assessment(similarity, plot_type = "dendrogram")
+```
+
+## Migration Analysis
+
+Calculate effective migration between populations:
+
+```{r migration}
+# Calculate effective migrants (summarized across time)
+migration <- calculate_effective_migrants(
+  example_turtles,
+  summarize_across_time = TRUE
+)
+
+# View results
+head(migration)
+
+# Visualize migration patterns
+plot_migration_heatmap(
+  migration,
+  data_type = "summarized"
+)
+```
+
+## Population Genetics
+
+### Creating genind Objects
+
+Convert turtle data to genind format for population genetic analysis:
+
+```{r popgen_setup}
+# Filter to adults at final time point
+adults_final <- example_turtles %>%
+  filter(breed == "adults", ticks == max(ticks))
+
+cat("Number of adults at final time point:", nrow(adults_final), "\n")
+
+# Process population genetics
+# Note: For this small example, we don't need max_individuals restriction
+pg_results <- process_popgen(
+  adults_final,
+  loci_names = letters[1:10],
+  progress = FALSE
+)
+
+# Check what we created
+names(pg_results)
+length(pg_results$genind_data)
+```
+
+### Genetic Diversity
+
+Calculate heterozygosity and other diversity metrics:
+
+```{r diversity}
+# Calculate diversity for each replicate
+diversity_list <- lapply(pg_results$genind_data, function(genind_obj) {
+  calculate_genetic_diversity(genind_obj, restore_names = TRUE)
+})
+
+# Visualize heterozygosity
+wrangle_heterozygosity_data(diversity_list) %>%
+  plot_heterozygosity_bars(
+    title = "Observed and Expected Heterozygosity",
+    y_label = "Heterozygosity"
+  )
+```
+
+### Genetic Differentiation
+
+Calculate differentiation statistics between populations:
+
+```{r differentiation}
+# Calculate popgen stats for each replicate
+# For this vignette, we use a small number of bootstraps for speed
+# In production analyses, use n_bootstrap = 1000 or turn off bootstrap
+diff_list <- lapply(pg_results$genind_data, function(genind_obj) {
+  calculate_popgen_stats(
+    genind_obj,
+    use_bootstrap = FALSE  # Turn off for speed in vignette
+  )
+})
+
+# Create color/shape mappings for loci
+locus_names <- letters[1:10]
+my_colors <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
+               "#0072B2", "#D55E00", "#CC79A7", "#999999",
+               "#000000", "blue")
+my_shapes <- 15:24
+
+# Visualize Jost's D
+wrangle_differentiation_data(diff_list, "Jost_D") %>%
+  plot_differentiation_strip(
+    y_var_col = "Jost_D",
+    y_label = "Jost's D",
+    title = "Genetic Differentiation Between Ponds",
+    locus_names_for_mapping = locus_names,
+    my_hardcoded_colors = my_colors,
+    my_custom_shapes = my_shapes
+  )
+
+# Visualize Hedrick's G'st
+wrangle_differentiation_data(diff_list, "Gst_H") %>%
+  plot_differentiation_strip(
+    y_var_col = "Gst_H",
+    y_label = "G'st",
+    title = "Genetic Differentiation (Hedrick's G'st)",
+    locus_names_for_mapping = locus_names,
+    my_hardcoded_colors = my_colors,
+    my_custom_shapes = my_shapes
+  )
+```
+
+### Allele Frequency Spectra
+
+Examine the distribution of allele frequencies:
+
+```{r afs}
+# Calculate allele frequency spectrum for each replicate
+afs_list <- lapply(pg_results$genind_data, function(genind_obj) {
+  calculate_allele_frequency_spectrum(genind_obj, by_population = FALSE)
+})
+
+# Plot spectra
+plot_allele_frequency_spectra(afs_list)
+```
+
+### Mutation Effect Sizes
+
+Examine the distribution of mutation effect sizes:
+
+```{r mutation_effects}
+# Summary of mutation effects
+summary(example_mutations$FmI)
+
+# Plot distribution by replicate
+plot_distribution_by_facet(
+  example_mutations,
+  y_var = "FmI",
+  facet_var = "run_number",
+  title = "Mutation Effect Size Distribution",
+  y_label = "Effect Size (FmI)"
+)
+```
+
+## Microevolution
+
+### Tracking Major Alleles
+
+Track frequency changes of founding alleles over time. **Note:** This requires genind objects from multiple time points, which is computationally intensive for large datasets.
+
+```{r major_alleles, eval=FALSE}
+# Create time series of genind objects (using all available time points)
+genind_series <- create_genind_time_series(
+  example_turtles %>% filter(breed == "adults"),
+  time_points = unique(example_turtles$ticks),
+  loci_names = letters[1:10],
+  min_individuals_per_pop = 5
+)
+
+# Wrangle major allele frequencies
+allele_data <- wrangle_major_alleles(
+  genind_series,
+  analysis_mode = "global"
+)
+
+# Plot trajectories
+plot_major_alleles(
+  allele_data,
+  trend_line = "quadratic",
+  type = "scatter",
+  analysis_mode = "global",
+  panels_per_row = 5
+)
+```
+
+### Detecting Selection
+
+Identify alleles showing significant positive frequency trends:
+
+```{r selection, eval=FALSE}
+# Find selected mutations
+# Note: This requires genind_series from above
+selected <- find_selected_mutations(
+  genind_list = genind_series,
+  mutation_data = example_mutations,
+  target_loci = letters[1:10],
+  frequency_scope = "global",
+  significance_threshold = 0.05
+)
+
+# View results
+head(selected)
+
+# Plot selected allele trajectories
+if(nrow(selected) > 0) {
+  plot_selected_mutations(
+    selected,
+    genind_series,
+    letters[1:10],
+    max_panels = 12
+  )
+}
+```
+
+## Working with Your Own Data
+
+When analyzing your own simulation output, use the file reading functions:
+
+```{r your_data, eval=FALSE}
+# Read your turtle files
+my_turtles <- read_turtles(
+  path = "path/to/your/data",
+  pattern = "*turtle",
+  sample_size = NULL  # Or set a number for large datasets
+)
+
+# For underscore format files
+my_turtles <- read_turtles_underscore_format(
+  path = "path/to/your/data",
+  sample_size = 50000  # Sample for memory efficiency
+)
+
+# Read environment data
+my_environment <- read_environments(
+  path = "path/to/your/data",
+  pattern = "environment"
+)
+
+# Read mutation data
+my_mutations <- read_mutations(
+  path = "path/to/your/data",
+  pattern = "mutations"
+)
+```
+
+## Memory Management for Large Datasets
+
+For large datasets with many replicates and time points, use these strategies:
+
+```{r memory_tips, eval=FALSE}
+# 1. Sample during reading
+tdat <- read_turtles(
+  sample_size = 50000,
+  sample_method = "systematic"
+)
+
+# 2. Filter to specific time points
+tdat_subset <- tdat %>% 
+  filter(ticks %in% c(500, 2500, 5000))
+
+# 3. Reduce individuals for population genetics
+pg_results <- process_popgen(
+  tdat,
+  max_individuals = 500  # Balance between stats and memory
+)
+
+# 4. Turn off or reduce bootstrap iterations
+stats <- calculate_popgen_stats(
+  genind_obj,
+  use_bootstrap = FALSE  # Or n_bootstrap = 100
+)
+
+# 5. Create targeted subsets
+subset_data <- create_analysis_subset(
+  tdat,
+  subset_method = "time",
+  subset_size = 10  # Use 10 evenly-spaced time points
+)
+
+# 6. Use garbage collection in long loops
+result_list <- vector("list", length(genind_list))
+for(i in seq_along(genind_list)) {
+  result_list[[i]] <- calculate_popgen_stats(genind_list[[i]])
+  if(i %% 5 == 0) gc(verbose = FALSE)
+}
+```
+
+## Generating Reports
+
+Create comprehensive automated reports:
+
+```{r reports, eval=FALSE}
+# Generate a full analysis report
+report_path <- create_abm_report(
+  turtle_data = my_turtles,
+  env_data = my_environment,
+  mutation_data = my_mutations,
+  output_dir = "analysis_results/",
+  experiment_name = "MyExperiment",
+  sample_for_plots = TRUE,
+  max_plot_points = 50000
+)
+```
+
+## Saving and Loading Results
+
+Save processed data for later use:
+
+```{r saving, eval=FALSE}
+# Save as RDS (preserves R objects perfectly)
+save_abm_data(my_turtles, "processed_turtles.rds")
+
+# Save as compressed CSV (for sharing/archiving)
+save_abm_data(my_turtles, "processed_turtles.csv", compress = TRUE)
+
+# Save as Parquet (efficient cross-platform format)
+save_abm_data(my_turtles, "processed_turtles.parquet")
+
+# Load data back
+tdat_loaded <- load_abm_data("processed_turtles.rds")
+```
+
+## Complete Minimal Workflow
+
+Here's a complete analysis from start to finish:
+
+```{r complete_workflow, eval=FALSE}
+# 1. Read data
+tdat <- read_turtles(path = ".", sample_size = 50000)
+edat <- read_environments(path = ".")
+mdat <- read_mutations(path = ".")
+
+# 2. Clean and preprocess
+tdat <- apply_breed_na_rules(tdat)
+
+# 3. Visual QC - check landscapes
+visualize_patches(edat[edat$ticks == 500,], "index", "run")
+
+# 4. Assess replicates
+similarity <- assess_replicate_similarity(tdat)
+plot_replicate_assessment(similarity, "pca")
+
+# 5. Examine population dynamics
+plot_breed_population(tdat, "adults")
+plot_breed_population(tdat, "larvae")
+
+# 6. Population genetics on final time point
+adults_final <- tdat %>% 
+  filter(breed == "adults", ticks == max(ticks))
+pg <- process_popgen(adults_final, max_individuals = 500)
+
+# 7. Calculate diversity
+diversity <- lapply(pg$genind_data, calculate_genetic_diversity)
+
+# 8. Visualize heterozygosity
+wrangle_heterozygosity_data(diversity) %>%
+  plot_heterozygosity_bars(title = "Heterozygosity", y_label = "Het")
+
+# 9. Calculate differentiation
+diff <- lapply(pg$genind_data, function(x) {
+  calculate_popgen_stats(x, use_bootstrap = FALSE)
+})
+
+# 10. Plot differentiation
+wrangle_differentiation_data(diff, "Jost_D") %>%
+  plot_differentiation_strip(
+    y_var_col = "Jost_D",
+    y_label = "D",
+    title = "Differentiation",
+    locus_names_for_mapping = letters[1:10],
+    my_hardcoded_colors = rainbow(10),
+    my_custom_shapes = 15:24
+  )
+```
+
+## Further Reading
+
+For more detailed examples and function documentation:
+
+-   `?read_turtles` - Data import options
+-   `?assess_replicate_similarity` - Replicate clustering methods
+-   `?calculate_genetic_diversity` - Diversity metrics
+-   `?find_selected_mutations` - Selection detection algorithms
+-   `?create_abm_report` - Automated report generation
+
+## Getting Help
+
+If you encounter issues:
+
+1.  Check function documentation: `?function_name`
+2.  View this vignette: `vignette("getting-started", package = "ACERT")`
+3.  Report bugs or request features on GitHub
+
+## Session Info
+
+```{r session_info}
+sessionInfo()
+```

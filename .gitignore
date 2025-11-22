@@ -1,0 +1,30 @@
+################################################################################
+# .gitignore
+################################################################################
+# R specific
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# Package building
+*.tar.gz
+*.tgz
+.Rbuildignore
+
+# Documentation
+/man/
+/doc/
+/Meta/
+
+# Temporary files
+*~
+*.swp
+.DS_Store
+
+# Output directories
+/results/
+/output/
+/plots/
+.httr-oauth
+.quarto
