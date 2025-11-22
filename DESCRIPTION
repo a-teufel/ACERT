@@ -57,3 +57,5 @@ Suggests:
     knitr,
     rmarkdown
 VignetteBuilder: knitr
+URL: https://github.com/a-teufel/ACERT
+BugReports: https://github.com/a-teufel/ACERT/issues
