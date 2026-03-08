@@ -119,15 +119,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This package is licensed under GPL-3.
 
-## Citation
-
-If you use ACERT in your research, please cite:
-
-```
-Lopez, J., Page, R., and Teufel, A. I. (2025). ACERT: Agent-Based Model of Complex Life Cycle Evolution – R Tools. R package version 0.1.0. https://github.com/a-teufel/ACERT
-
-```
-
 ## Contact
 
 For questions or issues, please open an issue on GitHub or contact [ateufel@tamusa.edu]
